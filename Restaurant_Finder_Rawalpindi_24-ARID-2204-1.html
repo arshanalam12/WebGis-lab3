@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restaurant Finder & Navigation Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--navy:#142b4a;--blue:#2463eb;--light:#f3f6fb;--ink:#1e293b;--muted:#64748b;--border:#dbe3ef}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--light);color:var(--ink)}
+header{background:linear-gradient(110deg,#142b4a,#2563eb);color:#fff;padding:18px 24px;box-shadow:0 3px 12px #142b4a30}
+header .eyebrow{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;opacity:.85}
+header h1{margin:7px 0 5px;font-size:clamp(21px,3vw,30px)}header p{margin:0;font-size:14px;opacity:.9}
+.layout{display:grid;grid-template-columns:260px minmax(300px,1fr) 235px;gap:14px;padding:14px;max-width:1600px;margin:auto}
+.panel{background:#fff;border:1px solid var(--border);border-radius:14px;padding:17px;box-shadow:0 4px 15px #142b4a0b;min-width:0}
+.panel h2{font-size:17px;margin:0 0 6px;color:var(--navy)}.hint{font-size:12px;color:var(--muted);line-height:1.5;margin:0 0 14px}
+.restaurant{width:100%;text-align:left;border:1px solid var(--border);background:#fff;border-radius:10px;padding:12px;margin:8px 0;cursor:pointer;color:var(--ink);transition:.15s}
+.restaurant:hover,.restaurant.active{border-color:var(--blue);background:#eff6ff}
+.restaurant strong{display:block;font-size:14px;margin-bottom:5px}.restaurant span{display:block;color:var(--muted);font-size:12px}
+#map{height:min(70vh,690px);min-height:420px;border-radius:11px;border:1px solid var(--border);z-index:1}
+.map-panel{padding:12px}.map-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 3px 12px}.map-top h2{margin:0}
+button.action{background:var(--blue);color:#fff;border:0;border-radius:9px;padding:10px 12px;font-weight:700;cursor:pointer;font-size:12px}
+button.action.secondary{background:#e8eef8;color:var(--navy)}button.action:disabled{opacity:.6;cursor:wait}
+.status{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:12px;font-size:13px;line-height:1.55}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.stat{background:#f8fafc;border:1px solid var(--border);padding:10px;border-radius:9px}.stat span{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}.stat strong{font-size:15px;color:var(--navy)}
+.student-badge{background:#eff6ff;border-radius:11px;padding:13px;margin-top:12px}.student-badge .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}.student-badge strong{display:block;margin-top:6px;overflow-wrap:anywhere}
+.info-row{padding:10px 0;border-bottom:1px solid #edf1f7;font-size:13px;line-height:1.5}.info-row:last-child{border-bottom:0}
+footer{text-align:center;color:var(--muted);font-size:11px;padding:0 16px 18px}
+@media(max-width:1050px){.layout{grid-template-columns:230px minmax(280px,1fr)}.right-panel{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px}.right-panel h2{grid-column:1/-1}.right-panel .student-badge{margin-top:0}}
+@media(max-width:700px){.layout{grid-template-columns:1fr;padding:10px}.map-panel{order:1}.left-panel{order:2}.right-panel{order:3;display:block}.right-panel h2{grid-column:auto}#map{height:55vh;min-height:360px}.map-top{align-items:flex-start;flex-direction:column}header{padding:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">WebGIS Development · Lab 03</div>
+  <h1>🍽️ Restaurant Finder & Navigation Dashboard</h1>
+  <p>Explore restaurants in Rawalpindi and get a route from your current location.</p>
+</header>
+<main class="layout">
+  <aside class="panel left-panel">
+    <h2>Restaurants</h2>
+    <p class="hint">Select a restaurant to display its marker and request a route from your current location.</p>
+    <button class="restaurant active" data-id="savour">
+      <strong>🍛 Savour Foods</strong><span>Gordon College Road, Rawalpindi</span>
+    </button>
+    <button class="restaurant" data-id="cheezious">
+      <strong>🍕 Cheezious Saddar</strong><span>Adam Jee Road, Saddar</span>
+    </button>
+    <button class="restaurant" data-id="chaaye">
+      <strong>☕ Chaaye Khana Saddar</strong><span>Haider Road, Saddar</span>
+    </button>
+    <div class="status" id="status" aria-live="polite">Choose a restaurant, then click “Find Route”. Allow location access when your browser asks.</div>
+  </aside>
+
+  <section class="panel map-panel">
+    <div class="map-top">
+      <h2>Rawalpindi Interactive Map</h2>
+      <button class="action" id="routeBtn">📍 Find Route</button>
+    </div>
+    <div id="map" role="application" aria-label="Interactive OpenStreetMap showing restaurants"></div>
+    <div class="stats">
+      <div class="stat"><span>ROUTE DISTANCE</span><strong id="distance">—</strong></div>
+      <div class="stat"><span>ESTIMATED TRAVEL TIME</span><strong id="duration">—</strong></div>
+    </div>
+  </section>
+
+  <aside class="panel right-panel">
+    <h2>Student Information</h2>
+    <div class="student-badge"><div class="label">Student Name</div><strong>Arshan Alam</strong></div>
+    <div class="student-badge"><div class="label">ARID Number</div><strong>24-ARID-2204</strong></div>
+    <div class="info-row"><strong>Assigned City</strong><br>Rawalpindi, Punjab, Pakistan</div>
+    <div class="info-row"><strong>Assigned Category</strong><br>Restaurants</div>
+    <div class="info-row"><strong>Technology</strong><br>HTML · CSS · JavaScript · Leaflet.js · OpenStreetMap · OSRM Routing API</div>
+  </aside>
+</main>
+<footer>Map data © OpenStreetMap contributors · Routing provided by the OSRM demo service. Internet access is required.</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const restaurants = {
+  savour: {name:"Savour Foods", lat:33.61057, lng:73.06238, address:"Gordon College Road, Rawalpindi"},
+  cheezious: {name:"Cheezious Saddar", lat:33.5989, lng:73.0477, address:"Adam Jee Road, Saddar, Rawalpindi"},
+  chaaye: {name:"Chaaye Khana Saddar", lat:33.5976, lng:73.0552, address:"Haider Road, Saddar, Rawalpindi"}
+};
+const map = L.map('map').setView([33.605,73.055],13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+}).addTo(map);
+let selectedId='savour', currentMarker=null, routeLayer=null, currentPosition=null;
+const restaurantMarkers={};
+Object.entries(restaurants).forEach(([id,r])=>{
+  restaurantMarkers[id]=L.marker([r.lat,r.lng]).addTo(map).bindPopup(`<b>${r.name}</b><br>${r.address}`);
+});
+restaurantMarkers.savour.openPopup();
+function setStatus(msg){document.getElementById('status').textContent=msg;}
+function selectRestaurant(id){
+  selectedId=id;
+  document.querySelectorAll('.restaurant').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  const r=restaurants[id]; map.setView([r.lat,r.lng],15); restaurantMarkers[id].openPopup();
+  document.getElementById('distance').textContent='—';document.getElementById('duration').textContent='—';
+  if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;}
+  setStatus(r.name+' selected. Click “Find Route” to calculate a route from your current location.');
+}
+document.querySelectorAll('.restaurant').forEach(b=>b.addEventListener('click',()=>selectRestaurant(b.dataset.id)));
+function formatDuration(seconds){
+  const mins=Math.round(seconds/60); if(mins<60)return mins+' min';
+  const h=Math.floor(mins/60),m=mins%60;return h+' hr '+m+' min';
+}
+async function getRoute(){
+  const btn=document.getElementById('routeBtn');btn.disabled=true;btn.textContent='Finding route…';
+  setStatus('Requesting your current location. Please allow location access in the browser.');
+  try{
+    if(!navigator.geolocation) throw new Error('This browser does not support geolocation.');
+    const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:15000,maximumAge:60000}));
+    currentPosition={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    if(currentMarker)map.removeLayer(currentMarker);
+    currentMarker=L.marker([currentPosition.lat,currentPosition.lng]).addTo(map).bindPopup('<b>Your current location</b>');
+    const r=restaurants[selectedId];
+    const url=`https://router.project-osrm.org/route/v1/driving/${currentPosition.lng},${currentPosition.lat};${r.lng},${r.lat}?overview=full&geometries=geojson`;
+    setStatus('Current location found. Calculating the route to '+r.name+'…');
+    const response=await fetch(url);
+    if(!response.ok)throw new Error('The routing service did not respond. Please try again.');
+    const data=await response.json();
+    if(data.code!=='Ok'||!data.routes||!data.routes.length)throw new Error('No driving route was found for this location.');
+    const route=data.routes[0];
+    if(routeLayer)map.removeLayer(routeLayer);
+    routeLayer=L.geoJSON(route.geometry,{style:{color:'#2563eb',weight:5,opacity:.85}}).addTo(map);
+    map.fitBounds(routeLayer.getBounds(),{padding:[35,35]});
+    document.getElementById('distance').textContent=route.distance>=1000?(route.distance/1000).toFixed(2)+' km':Math.round(route.distance)+' m';
+    document.getElementById('duration').textContent=formatDuration(route.duration);
+    restaurantMarkers[selectedId].openPopup();
+    setStatus('Route calculated to '+r.name+'. Distance and travel time are estimates and may vary with traffic and road conditions.');
+  }catch(err){
+    let message=err.message||'Unable to calculate route.';
+    if(err.code===1)message='Location permission was denied. Allow location access in your browser settings and try again.';
+    else if(err.code===2)message='Your location could not be determined. Check your device location settings and try again.';
+    else if(err.code===3)message='Location request timed out. Please try again.';
+    setStatus(message);
+  }finally{btn.disabled=false;btn.textContent='📍 Find Route';}
+}
+document.getElementById('routeBtn').addEventListener('click',getRoute);
+</script>
+</body>
+</html>
